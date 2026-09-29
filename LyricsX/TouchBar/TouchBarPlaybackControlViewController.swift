@@ -47,14 +47,6 @@ class TouchBarPlaybackControlViewController: NSViewController {
         case 2: fastForwardAction(nil)
         default: break
         }
-    
-
-    private func segmentIndex(for sender: NSSegmentedControl) -> Int {
-        if let event = NSApp.currentEvent {
-            let index = sender.segment(for: event)
-            if index >= 0 { return index }
-        }
-        return sender.selectedSegment
     }
 
     @IBAction func rewindAction(_ sender: Any?) {
