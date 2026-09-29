@@ -38,8 +38,10 @@ class TouchBarPlaybackControlViewController: NSViewController {
     }
 
     @IBAction func segmentAction(_ sender: NSSegmentedControl) {
-        guard let event = NSApp.currentEvent else { return }
-        let segment = sender.segment(for: event)
+        let segment = sender.selectedSegment
+        for index in 0..<sender.segmentCount {
+            sender.setSelected(false, forSegment: index)
+        }
         guard segment >= 0 else { return }
         switch segment {
         case 0: rewindAction(nil)
@@ -48,7 +50,7 @@ class TouchBarPlaybackControlViewController: NSViewController {
         default: break
         }
     }
-
+    
     @IBAction func rewindAction(_ sender: Any?) {
         if selectedPlayer.playbackTime > 5 {
             selectedPlayer.playbackTime = 0
