@@ -1,0 +1,97 @@
+# Build LyricsX on GitHub-hosted macOS (no local Xcode).
+# Download: Actions run → Artifacts, or Releases when publish is enabled.
+
+name: CI Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Upload .zip to a GitHub pre-release (for install testing)"
+        required: false
+        default: true
+        type: boolean
+      configuration:
+        description: "Xcode configuration"
+        required: false
+        default: Debug
+        type: choice
+        options:
+          - Debug
+          - Release
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    env:
+      LYRICSX_SKIP_BUILD_BUMP: "1"
+      LYRICSX_USE_LOCAL_DEPENDENCY: "0"
+      DERIVED_DATA: build/DerivedData
+      CONFIGURATION: ${{ github.event_name == 'workflow_dispatch' && inputs.configuration || 'Debug' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Xcode version
+        run: xcodebuild -version
+
+      - name: Build LyricsX
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project LyricsX.xcodeproj \
+            -scheme LyricsX \
+            -configuration "$CONFIGURATION" \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath "$DERIVED_DATA" \
+            -skipMacroValidation \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Package .app
+        id: package
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find "$DERIVED_DATA/Build/Products" -name 'LyricsX.app' -type d | head -1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "LyricsX.app not found under $DERIVED_DATA/Build/Products"
+            find "$DERIVED_DATA" -name 'LyricsX.app' 2>/dev/null || true
+            exit 1
+          fi
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          ZIP_NAME="LyricsX-${CONFIGURATION}-${SHORT_SHA}.zip"
+          ditto -c -k --keepParent "$APP_PATH" "build/$ZIP_NAME"
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LyricsX-${{ env.CONFIGURATION }}-${{ github.run_number }}
+          path: build/*.zip
+          retention-days: 14
+
+      - name: Publish pre-release
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.publish_release == true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ci-${{ github.run_number }}
+          name: CI build ${{ github.run_number }} (${{ env.CONFIGURATION }})
+          prerelease: true
+          generate_release_notes: true
+          files: build/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
